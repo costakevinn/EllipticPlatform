@@ -1,0 +1,41 @@
+models:
+  - name: classes
+    columns:
+      - name: tx_id
+        data_tests:
+          - unique
+          - not_null
+      - name: label
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["licit", "illicit"]
+  - name: edges
+    columns:
+      - name: tx_from
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("classes")
+                field: tx_id
+      - name: tx_to
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("classes")
+                field: tx_id
+  - name: features
+    columns:
+      - name: tx_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref("classes")
+                field: tx_id
+      - name: time_step
+        data_tests:
+          - not_null

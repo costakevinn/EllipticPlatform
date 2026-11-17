@@ -1,0 +1,9 @@
+name: elliptic
+version: "1.0.0"
+profile: elliptic
+
+models:
+  elliptic:
+    +materialized: table
+    gold:
+      +schema: gold

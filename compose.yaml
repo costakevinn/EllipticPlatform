@@ -1,0 +1,154 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:3.3.1
+  user: "${HOST_UID}:0"
+  group_add: ["${DOCKER_GID}"]
+  profiles: ["orchestrate"]
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg://airflow:${AIRFLOW_DB_PASSWORD}@airflow-db/airflow
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: admin:admin
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/config/simple_auth_passwords.json
+    HOST_UID: ${HOST_UID}
+    HOST_GID: ${HOST_GID}
+    HOST_PROJECT_DIR: ${HOST_PROJECT_DIR}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    KAGGLE_API_TOKEN: ${KAGGLE_API_TOKEN}
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/config:/opt/airflow/config
+    - /var/run/docker.sock:/var/run/docker.sock
+  depends_on:
+    airflow-init:
+      condition: service_completed_successfully
+
+services:
+  dev:
+    build: .
+    image: elliptic-dev
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      KAGGLE_API_TOKEN: ${KAGGLE_API_TOKEN}
+      GIT_PYTHON_REFRESH: quiet
+      USER: ${USER}
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: elliptic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: elliptic
+    volumes:
+      - .:/workspace
+    stdin_open: true
+    tty: true
+
+  jupyter:
+    image: elliptic-dev
+    user: "${HOST_UID}:${HOST_GID}"
+    profiles: ["explore"]
+    ports:
+      - "127.0.0.1:8888:8888"
+    volumes:
+      - .:/workspace
+    command: uv run --group explore jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+
+  mlflow:
+    image: elliptic-dev
+    user: "${HOST_UID}:${HOST_GID}"
+    profiles: ["track"]
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - .:/workspace
+    command: uv run mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///data/mlflow/mlflow.db --default-artifact-root /workspace/data/mlflow/artifacts
+
+  api:
+    image: elliptic-dev
+    user: "${HOST_UID}:${HOST_GID}"
+    profiles: ["api"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: elliptic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: elliptic
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - .:/workspace
+    depends_on:
+      - postgres
+    command: uv run uvicorn --app-dir src api:app --host 0.0.0.0 --port 8001
+
+  postgres:
+    image: postgres:17
+    profiles: ["api"]
+    environment:
+      POSTGRES_USER: elliptic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: elliptic
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  kafka:
+    image: apache/kafka:4.3.1
+    hostname: kafka
+    profiles: ["stream"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+
+  airflow-db:
+    image: postgres:17
+    profiles: ["orchestrate"]
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflowdb:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      retries: 10
+
+  airflow-init:
+    <<: *airflow-common
+    command: ["airflow", "db", "migrate"]
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+
+  airflow-api-server:
+    <<: *airflow-common
+    command: ["airflow", "api-server"]
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: ["airflow", "scheduler"]
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: ["airflow", "dag-processor"]
+
+volumes:
+  pgdata:
+  kafkadata:
+  airflowdb:

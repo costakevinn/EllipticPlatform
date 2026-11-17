@@ -1,0 +1,29 @@
+# Secrets and local configuration
+.env
+airflow/config/
+airflow/logs/
+
+# Data (CC BY-NC-ND 4.0: never redistributed) and generated stores
+data/
+
+# Python and tooling caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# dbt generated files
+transform/target/
+transform/logs/
+transform/.user.yml
+
+# Notebooks
+notebooks/.ipynb_checkpoints/
+
+# Personal project tracker (not part of the project)
+estado-projeto/
+
+# Misc
+*.log
+.DS_Store

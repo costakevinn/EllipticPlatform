@@ -1,0 +1,34 @@
+[project]
+name = "elliptic-platform"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "kaggle>=2.2.5",
+    "six>=1.17.0",
+    "pandas",
+    "pyarrow",
+    "duckdb",
+    "dbt-duckdb",
+    "torch",
+    "mlflow",
+    "psutil",
+    "psycopg[binary]",
+    "fastapi",
+    "uvicorn",
+    "confluent-kafka",
+]
+
+[dependency-groups]
+explore = ["jupyterlab", "matplotlib"]
+dev = ["pytest", "ruff", "httpx2"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
